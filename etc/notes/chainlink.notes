@@ -1,0 +1,626 @@
+=====================================================================================
+						PART 1: BASIC DEPLOYMENT AND OPERATION
+=====================================================================================
+
+1: In order to handle requests, we must deploy an orcale contract.
+In order to do this we first need to acquire RopstenETH and LINK 
+	 	ETH 	: https://faucet.metamask.io/   
+	 	LINK 	: https://ropsten.chain.link/
+
+
+2: Take note of the chainlink token contract testnet address 
+	  	ROPSTEN : 0x20fE562d797A42Dcb3399062AE9546cd06f63280
+	  	MAINNET : 0x514910771AF9Ca656af840dff83E8264EcF986CA
+
+
+3: Use remix to compile the oracle.sol contract provided by Chainlink.
+	  	IDE 	: https://remix.ethereum.org/ 
+	 	COMPILE : check compiler version compatability 
+	  	ORACLE  : 0x5471030a14ea46a32f065ac226516723b429ec2b 	
+	 
+	  	The deploy step will issue a "contract creation" transaction
+	 	this loads the compiled contact code to the Ethereum blockchain
+	 	
+	  	txHash	: 0xe3d3a2cb050367d58bd46dc654f47a48e8593afa10a5d1a2baba9640fdb4712a
+	  	To		: [Contract 0x5471030a14ea46a32f065ac226516723b429ec2b Created]
+
+
+4: Launch a testnode using an EC2-micro instance
+	a:	  	ssh into instance
+		 	
+		  	ssh 	: ssh -i $CL_KEY -L 6688:localhost:6688 ec2-user@$IP
+		 	vars 	: CL_KEY={pem_key_location}
+		  			: IP={IP}
+		 
+	b:	  	install and run docker (aws)
+		 		sudo amazon-linux-extras install -y docker
+		 		sudo systemctl start docker
+		 		sudo gpasswd -a $USER docker
+		 		exit		
+		 
+	c: 	 	pull the docker image 
+		  		docker pull smartcontract/chainlink
+		 
+	d: 	  	create .env file for chainlink 
+		 		mkdir ~/.chainlink-ropsten
+		 
+		 		echo "ROOT=/chainlink
+		 		LOG_LEVEL=debug
+		 		ETH_CHAIN_ID=3
+		 		MIN_OUTGOING_CONFIRMATIONS=2
+		 		LINK_CONTRACT_ADDRESS=0x20fe562d797a42dcb3399062ae9546cd06f63280
+		 		CHAINLINK_TLS_PORT=0
+		 		SECURE_COOKIES=false
+		 		ALLOW_ORIGINS=*" > ~/.chainlink-ropsten/.env
+		 
+	e:	 	add remote ethereum websocket endpoint .env
+		 		echo "ETH_URL=wss://ropsten-rpc.linkpool.io/ws" >> ~/.chainlink-ropsten/.env
+		 
+	f: 	  	run the chainlink node
+		  		cd ~/.chainlink-ropsten	
+		 		docker run -p 6688:6688 -v ~/.chainlink-ropsten:/chainlink -it --env-file=.env smartcontract/chainlink local node
+		 		
+	g: 	  	on firstrun, we will be prompted for two passwords
+		  		1) keystore file password (to unlock keystore file)
+		 		2) API endpoint password (for local access to gui)
+		 
+		 		[ctrl+P ctrl+Q] to detach the container (slowly)
+		 
+	h:	 	take note of node address and fund with RopstenETH:
+		 		AWSNODE :	0x10D72506378f482591D74CA835252aA15FA404B5
+		 
+	i: 	  	save keystore file locally so we can recover RopstenETH 
+		  		/home/ec2-user/.chainlink-ropsten/tempkeys/<addr>.json
+
+5: Add your node to the Oracle contract (remix.ethereum.org)
+	 	method	: setFulfillmentPermission
+	 	params	: 0x10D72506378f482591D74CA835252aA15FA404B5,true
+	 
+	 	txHash	: 0x73a78951820d7e285a413236ad85c0901563a9cd86fee872822db5aa354fc24b
+	 
+	 	InputData	:
+	 		Function 	: setFulfillmentPermission(address _node, bool _allowed) ***
+	 		MethodID	: 0x7fcd56db
+	 		[0]:  00000000000000000000000010d72506378f482591d74ca835252aa15fa404b5
+	 		[1]:  0000000000000000000000000000000000000000000000000000000000000001
+
+
+
+6: Add jobs to the node (as JSON blob)
+	  	YOUR_ORACLE_CONTRACT_ADDRESS = 0x5471030a14ea46a32f065ac226516723b429ec2b
+	  	This is the address we deploy oracle.sol to, NOT the node address
+	  	Example Jobs: https://docs.chain.link/docs/fulfilling-requests
+	 
+	  	Note JobIDs of our deployed jobs
+	  		EthBytes32(GET)		: 6ad0e8d5a25148aaa5ffe5352603a9e2
+	  		EthBytes32(POST)	: 992c427f848848b783c3c86d69854e95
+	  		EthInt256 			: 479920ea78064a3897a14c9c2f32a329
+	  		EthUint256 			: 976d64522f614334b999151ff692c898
+	  		EthBool 			: 661966aaa7594958945f75a505b8f2a2
+ 
+
+7: Create a request to your node: 
+	  	Use remix to compile the testConsumer.sol contract provided by Chainlink.	
+	  	Deploy the "ATestnetConsumer" contract and fund it contract with some LINK
+	 	
+	  	txHash	: 0x7ec1645d7f2d4fdd28714cc6cbeadfc16c66e6b8417753acda69e5ca60f38861
+	  	To		: [Contract 0x7ed6af1ec97704a8e96217d91adf3543e9727332 Created]
+	 
+	 	Fund the consumer contract with LINK: 
+	 		0x7ed6af1ec97704a8e96217d91adf3543e9727332
+	 
+	  	Call requestEthereumPrice(address _oracle, string _jobId)
+	  		"0x5471030a14ea46a32f065ac226516723b429ec2b", "976d64522f614334b999151ff692c898"
+	  		currentPrice = uint256: 18544
+	 		
+	  	What happened (sans contract creation): 
+	 		0) Set 		OracleContract.setFulfillmentPermission(OurNode,true) 
+	  		1) Call 	ConsumerContract.requstEthereumPrice(OracleContract,JobID)
+	 					{ 1.0 LINK 	: ConsumerWallet(Metamask) -> OracleContract }
+	 					{ DATA(GAS)	: Node -> ConsumerContract }
+	 		2) Check 	ConsumerContract "currentPrice" variable is updated on chain 
+
+
+=====================================================================================
+						PART 2: PRODUCTION DEPLOYMENT
+=====================================================================================
+
+1: Create postgres-database for node(s)
+	 
+	 	db.t2.micro instance 		(to-start)
+	 	general-purpouse SSD 		(100GB)
+	 	disable-storage-autoscaling (to-start)
+	 	no-standby instance 		(to-start)
+	 	use-default-VPC 			(VPC-10c0fa7b)	
+	  	no-public-IP				(only-accessbale from instances in VPC)
+	 	VPC security group 			(unselected no-public-IP) 
+	  	port 5432					(standard)
+	  	backup-retention 			(7-days)
+	 	security-group				(default)
+	 
+	
+2: Configure and verify connectivity to database from EC2 instance running chainlink node	
+	 
+	 	Note: AmazonAMI is a minimal RHEL install. Here we only install the client
+	 
+	 	sudo yum install -y https://download.postgresql.org/pub/repos/yum/10/redhat/rhel-latest-x86_64/postgresql10-libs-10.7-2PGDG.rhel7.x86_64.rpm
+	 
+	 	sudo yum install -y https://download.postgresql.org/pub/repos/yum/10/redhat/rhel-latest-x86_64/postgresql10-10.7-2PGDG.rhel7.x86_64.rpm
+	 
+	 	sudo yum install -y https://download.postgresql.org/pub/repos/yum/10/redhat/rhel-latest-x86_64/postgresql10-server-10.7-2PGDG.rhel7.x86_64.rpm
+	 
+	  OR
+	 
+	 	sudo amazon-linux-extras install postgresql10
+	 
+	  THEN
+	 
+	 	psql --version
+	 	psql (PostgreSQL) 10.7
+
+3: 	Take note of Virtual-Private-Cloud(VPC)-settings and security group and try to connect to db
+	 
+	 	vpc-10c0fa7b 				172.31.0.0/16
+	  	Instance (Private IPs)		172.31.40.19
+	 	sg-75ed8c1b		default 	vpc-10c0fa7b
+	 
+	  	Instance and DB are in same VPC. Note that the DB-instance was added to the "default" security group
+	  	we must also add the EC2 instance to this security group to allow inbound connections from port 5432
+	  	to the DB
+	 	
+	  	to(default): add rule->postgresDB->172.31.40.19/32
+	  
+	  	Attempt to connect to DB. Note that by default a database named "postgres" is created. we must specify 
+	 	the database name when connecting with the psql client.
+	  		psql -p 5432 -h <endpoint> -U <uname> <db_name>
+	 
+
+4: 	In postgres, create some databases for the chainlink nodes
+	 
+	 	postgres=> CREATE DATABASE chainlinkropsten;
+	 	postgres=> CREATE DATABASE chainlinkmainnet;
+	 	postgres=> \l
+	 
+
+5: 	Create a bash file for quickly creating and editing .env files
+	 	
+	 	echo "ROOT=/chainlink
+	 	LOG_LEVEL=debug
+	 	ETH_CHAIN_ID=3
+	 	MIN_OUTGOING_CONFIRMATIONS=2
+	 	LINK_CONTRACT_ADDRESS=0x20fe562d797a42dcb3399062ae9546cd06f63280
+	 	ORACLE_CONTRACT_ADDRESS=${ORACLE_CONTRACT_ADDRESS}
+	 	MINIMUM_CONTRACT_PAYMENT=${MINIMUM_CONTRACT_PAYMENT}
+	 	CHAINLINK_TLS_PORT=0
+	 	SECURE_COOKIES=false
+	 	ALLOW_ORIGINS=* 
+	 	ETH_URL=wss://cl-ropsten.fiews.io/v1/${WSS_API}
+	 	DATABASE_URL=postgresql://${USERNAME}:${PASSWORD}@${ENDPOINT}:${PORT}/${DATABASE}
+	 	DATABASE_TIMEOUT=0"
+	 
+	  	Note the changes:
+	 		RACLE_CONTRACT_ADDRESS needed for withdraw function in node
+	 		MINIMUM_CONTRACT_PAYMENT specifis minimum payment (reduced for chron)
+	 		DATABASE_URL points to postgres database instance we created
+	 		DATABASE_TIMEOUT needed for failover architecture		
+
+6: 	Restart docker container(s)
+	 	docker ps
+	  	(note container ID)
+	 	docker stop <containerID>
+	 	docker run -p 6688:6688 -v ~/.chainlink-ropsten:/chainlink -it --env-file=.env smartcontract/chainlink local node
+
+
+7: 	Setup TLS for the client by creating keypair (.crt,.key)
+	 
+	 	mkdir ~/.chainlink-ropsten/tls
+	 
+	 	openssl req -x509 -out  ~/.chainlink-ropsten/tls/server.crt  -keyout ~/.chainlink-ropsten/tls/server.key \
+	 	  -newkey rsa:2048 -nodes -sha256 -days 365 \
+	 	  -subj '/CN=localhost' -extensions EXT -config <( \
+	 	   printf "[dn]\nCN=localhost\n[req]\ndistinguished_name = dn\n[EXT]\nsubjectAltName=DNS:localhost\nkeyUsage=digitalSignature\nextendedKeyUsage=serverAuth")
+	 
+	 	Update .env file to use TLS:
+	 		CHAINLINK_TLS_PORT=0
+	 		SECURE_COOKIES=false
+	 
+	 	Changed to:
+	 		TLS_CERT_PATH=${TLS_PATH}/server.crt
+	 		TLS_KEY_PATH=${TLS_PATH}/server.key
+	 		CHAINLINK_TLS_PORT=6689
+	 		SECURE_COOKIES=true
+	 
+
+8: 	Restart docker container(s) on port 6689:6689
+	 
+	 	docker ps
+	  	(note container ID)
+	 	docker stop <containerID>
+	 	docker run -p 6689:6689 -v ~/.chainlink-ropsten:/chainlink -it --env-file=.env smartcontract/chainlink local node
+	 	
+	  	http://localhost:6688/ (does not work)
+	 
+	====================================================
+	UNABLE TO RUN WITH TLS: REPORT ERROR TO CHAINLINK
+	====================================================
+	 	2019-08-22T13:45:24Z [ERROR] open /home/ec2-user/.chainlink-ropsten/tls/server.crt : no such file or directory cmd/client.go:118       stacktrace=github.com/smartcontractkit/chainlink/core/logger.ErrorIf
+	 		/go/src/github.com/smartcontractkit/chainlink/core/logger/logger.go:172
+	 	github.com/smartcontractkit/chainlink/core/cmd.runServerTLS
+	 		/go/src/github.com/smartcontractkit/chainlink/core/cmd/client.go:118
+	 	github.com/smartcontractkit/chainlink/core/cmd.ChainlinkRunner.Run.func2
+	 		/go/src/github.com/smartcontractkit/chainlink/core/cmd/client.go:95
+	 	github.com/smartcontractkit/chainlink/vendor/golang.org/x/sync/errgroup.(*Group).Go.func1
+	 	/go/src/github.com/smartcontractkit/chainlink/vendor/golang.org/x/sync/errgroup/errgroup.go:57 
+	====================================================
+	 	[ec2-user@ip-XXXXXX tls]$ ls
+	 		server.crt  server.key
+	 	[ec2-user@ip-XXXXXX tls]$ pwd 
+	 		/home/ec2-user/.chainlink-ropsten/tls
+
+9: 	Setup (live) testnet database with secure passwords (etc): 
+	 		
+	 	Drop the tables created by the node
+	 		DROP DATABASE chainlinkropsten;
+	 		CREATE DATABASE chainlinkropsten;
+	 
+	 	restart the node and enter secure passwords on boot
+
+10: Reconfigure the node
+	 
+	  	a) remix: recompile oracle.sol
+	 	b) setFufillmentPermissions(<new_addr>, true)
+	 	c) Note JobIDs of our deployed jobs
+	  			EthBytes32(GET)		: 44a7a8bd832d4849a2fc2be9aa5c1e41
+	  			EthBytes32(POST)	: 62e4c739814344f5b151225cbee1eba7
+	  			EthInt256 			: 8f5e01e3a59a4178ba884b6bffc0782e
+	  			EthUint256 			: fb944cd0c8e842aea56c14ace05f1a95
+	  			EthBool 			: 46c2ce00a08540798477eddca9df4dbd
+	 	d) create a request to your node:
+	 		i)  Deploy the "ATestnetConsumer" contract
+	 			_consumer=0x7ed6af1ec97704a8e96217d91adf3543e9727332
+	 		ii) Fund the consumer contract with some LINK
+	  		iii)requestEthereumPrice(address _oracle, string _jobId)
+	 			_oracle=0x5471030a14ea46a32f065ac226516723b429ec2b
+	 			_jobId=fb944cd0c8e842aea56c14ace05f1a95
+	 		iv) report current price
+	 			currentPrice uint256: 19190
+	 		v)  LINK is paid from the consumer contract to the oracle contract
+	 			Note who can withdraw from the oracle (node, funder of consumer 
+	 			contract). Any other address attempting to withdraw from oracle
+	 			contract gives infinite gas error
+
+11: Set up cron job
+	 	
+	 	a) Need to redeploy the contract with a reduced cost of execution
+	 		uint256 constant private ORACLE_PAYMENT =  1000000000000000;
+	  		(note .env) MINIMUM_CONTRACT_PAYMENT	=  1000000000000000
+	 
+	 		txHash: 0x4e68823e93ae3a49d395e2c646012de48285ec38350966cd8eefb021183100f6 
+	 		Contract Created: 0x187b0774af793cf6d92735e809b7457fb355fea6
+	 		Fund Contract: 10 LINK
+	 		txHash: 0xffef8867662f2030f18571e193c60c00b27050ea69494f6d89ddda79166df601
+	 
+	 	b) Attempt to execute reduced price consumer contract. Note that
+	 		txHash	: 0xf672bf0a3c9297ef464ac18f5cead02d11d226efffbfd0fc648293ec32b4ed5f 
+	 		From 	: 0x187b0774af793cf6d92735e809b7457fb355fea6
+	 		To 		: 0x5471030a14ea46a32f065ac226516723b429ec2b
+	 		For 	: 0.001 ChainLink To... (LINK)
+	 		uint256 : 19190
+	 	
+	 
+	 	c) transferOwnership of consumer contract to node (missing step):
+	  		txHash 	: 0xe60ebdde2747de85a337b2f95e4bf10540b7129ecfa408fd31cfd30691e3e108
+	 		Function: transferOwnership(address newOwner) ***
+	 		MethodID: 0xf2fde38b
+	 		[0]:  00000000000000000000000038868083fb89b571c53d2765d453d2f90f51e196		
+	 
+	 	d) transferOwnership of oracle contract to node (important):
+	 		txHash 	: 0x28508bd8733501193f26f4e965daff830d670522c158cfbbec83362b7f905821
+	 		Function: transferOwnership(address newOwner) ***
+	 		MethodID: 0xf2fde38b
+	 		[0]:  00000000000000000000000038868083fb89b571c53d2765d453d2f90f51e196
+	 
+	  	e) Note for ethtx adaptor we must specify: 
+	 		"params": {
+	     		"address": "0x187b0774af793cf6d92735e809b7457fb355fea6",
+	    		"functionSelector": "0xab643c10",
+	     		"dataPrefix": "0x0000000000000000000000005471030a14ea46a32f065ac226516723b429ec2b000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000206662393434636430633865383432616561353663313461636530356631613935"
+	  	 	}
+	 
+	  	Note that functionSelector and dataPrefix may be found in remix by looking at "Encode Values and Copy to Clipboard"
+	 
+	  	<-IMAGE-INSTANCE->
+
+
+=====================================================================================
+					PART 3: MISC NOTES (LOGGING/FAILOVER RELATED)
+=====================================================================================
+	
+1: 	Acquire a few Elastic IPs for the node so we have a static set of IPs. This will 
+	help with launch, migration, and maintenance. Associate with running instance.
+	 	3.120.221.138
+	 	3.123.79.203
+	 
+	 	Note we associate the ElasticIP with the instance in the ElasticIP window, 
+	 	NOT the EC2 instance window.
+
+
+2: 	EaaS note (Fiews API key)
+	 
+	 	When chainging to elastic IP, the EaaS from Fiews API key was invalid 
+	 	disconnected because the IP had changed. Currently running with LP
+
+2: 	Update IP routing table settings:
+	 	INBOUND 
+	 	PostgreSQL    TCP     5432    172.31.0.0/16
+	 	SSH           TCP     22      0.0.0.0/0
+	 
+	 	OUTBOUND
+	 	All traffic   All     All     0.0.0.0/0
+
+3: 	Configure chainlink node for JSON logging (vs. human readable)
+	 
+	  Add to .env configuration script
+	 	JSON_CONSOLE=true
+	 
+	  (human readable)
+	  2019-08-23T10:54:42Z [INFO]  ETH Balance for 0x38868083fb89B571C53D2765d453D2f90F51e196: 1.688967240000000000 cmd/local_client.go:128 address=0x38868083fb89B571C53D2765d453D2f90F51e196 balance=1.688967240000000000 
+	 
+	  (JSON)
+	  {"level":"info","ts":1566558651.8044746,"caller":"cmd/local_client.go:128","msg":"LINK Balance for 0x38868083fb89B571C53D2765d453D2f90F51e196: 1.811000000000000000","address":"0x38868083fb89B571C53D2765d453D2f90F51e196","balance":"1.811000000000000000"}
+
+
+3: 	Setting up AWSCloudWatch. We will use the cloudwatch driver to scrape data from 
+	the node and submit to cloudwatch for monitoring (using docker awslogs driver).
+	the default behavior is to use the json-file driver, saving container logs to a 
+	JSON file.
+	 
+	  Guide: https://logz.io/blog/logging-docker-containers-aws-cloudwatch/
+	 
+	  a) First, create a new user in the IAM console (or select an existing one). 
+	  Make note of the user’s security credentials (access key ID and access key secret)
+	 	USERNAME
+	 	AWS_ACCESS_KEY_ID
+	 	AWS_SECRET_ACCESS_KEY
+	 
+	  Also create a Role (in case we want to attach our policy to an EC2 instance)	
+	 
+	  b) Define a new policy (in policies) and attach it to the user AND role:
+	 	 (chainlink-logging->policy_usage->attach)
+	 
+	 	NAME: chainlink-logging-policy
+	 	{
+	 		"Version": "2012-10-17",
+	  		"Statement": [
+	 		    {
+	 		       "Action": [
+	 		          "logs:CreateLogStream",
+	 		          "logs:PutLogEvents"
+	 		       ],
+	 		       "Effect": "Allow",
+	 		       "Resource": "*"
+	 		    }
+	 		]
+	 	}
+	 
+	  c) Go to CloudWatch Console and create a new log group
+	 	(Logs->Actions->CreateGroup->chianlink-logging-group)
+	 
+	  	Within this log group the docker container will run logging streams with name 
+	 	equal to the container name. 
+	 
+	  d) The next step is to configure the Docker daemon (and not the Docker engine) 
+	     your AWS user credentials. NOT_NEEDED if you roll own EC2 Instance
+	 
+	  	create file /etc/init/docker.override
+	 		env AWS_ACCESS_KEY_ID=
+	 		env AWS_SECRET_ACCESS_KEY=	
+	 
+	 	restart: sudo systemctl restart docker
+	 
+	  e) If rolling own EC2 instace, attach the role to the instance to allow logging 
+	     PRIOR to starting the chainlink node (node will not boot otherwise)
+	 
+	  	Note that we have created
+	 		user: chainlink-logging-user
+	 		role: chainlink-logging-role
+	 	And attached user to 
+	 		policy: chainlink-logging-policy
+	 	And created in AWSCloudWatch
+	 		group: chainlink-logging-group
+
+
+5: Restart the docker-container with extra flags. 
+	 
+	  docker run -it --log-driver="awslogs" --log-opt awslogs-region="us-east-1" --log-opt awslogs-group="log-group" --log-opt awslogs-stream="log-stream"
+	  
+	  docker run --log-driver="awslogs" --log-opt awslogs-group="chainlink-logging-group" --log-opt awslogs-stream="chainlink-logging-stream"
+	  	if awslogs-group  is not specifed the driver will NOT work
+	 	if awslogs-region is not specified, it will default to instance region
+	 	if awslogs-stream is not specified, it will created with dockerID
+
+
+6:	For docker container (intra-instance) failover we run two containers
+	 
+	  	Note the full command to run a container with logging. ${INSTANCE} and ${TIMESTAMP} serve to uniquely 
+	 	identify this instance in the logfiles (each run generates a timestamped-instancestamped stream)
+	 
+	  	docker run --name chainlink --log-driver="awslogs" --log-opt awslogs-group="chainlink-logging-group" --log-opt awslogs-stream="chainlink-primary-${INSTANCE}-${TIMESTAMP}" -p 6688:6688 -v ~/.chainlink-ropsten:/chainlink -it --restart=unless-stopped --env-file=.env smartcontract/chainlink local node -p /chainlink/.password -a /chainlink/.api
+	 
+	  	For failover we run a redundant container
+	 	docker run --name secondary --log-driver="awslogs" --log-opt awslogs-group="chainlink-logging-group" --log-opt awslogs-stream="chainlink-primary-${INSTANCE}-${TIMESTAMP}" -p 6687:6688 -v ~/.chainlink-ropsten:/chainlink -it --restart=unless-stopped --env-file=.env smartcontract/chainlink local node -p /chainlink/.password -a /chainlink/.api
+	 
+	  	Note that the password is stored as plain text in ~/.chainlink-ropsten/.password, but that we refreence this 
+	  	file from the ROOT=/chainlink environment variable. Since our startup script runs two containers we must 
+	 	CTRL-P CTRL-Q twice to detach both. (the same goes for the .api)
+	  	
+	  	Running "docker ps" we see: and we have a login prompt at "http://localhost:6688/signin"
+	 
+	 	CONTAINER ID        IMAGE                     COMMAND                  CREATED             STATUS              PORTS                    NAMES
+	 	dda874c05b75        smartcontract/chainlink   "chainlink local nod���"   2 minutes ago       Up 2 minutes        0.0.0.0:6687->6688/tcp   secondary
+	 	7672bf0ddc5c        smartcontract/chainlink   "chainlink local nod���"   2 minutes ago       Up 2 minutes        0.0.0.0:6688->6688/tcp   chainlink
+	 
+	 	Note on ports 
+	 		docker run -p 127.0.0.1:80:8080/tcp 
+	 		This binds port 8080 of the container to TCP port 80 on 127.0.0.1 of the host machine. 
+	 		(for secondary: binds 6688 of container to 6687 of "local machine(i.e. the EC2 instance")
+	 
+	  	The helps us to construct the ssh command. We want to forward 6688(6687) of the EC2 instance
+	 	to 6688(6687) of the laptop via ssh tunneling.
+	 		ssh -i $CL_KEY -4 -L 6687:localhost:6687 -L 6688:localhost:6688  ec2-user@$IP
+	 
+	 	Now the primary host is functioning. Looking at the logs, we see the following entry for secondary.
+	 	secondary-i-04d5d08893dea5d46-1566580324
+	 	{
+	 	    "level": "info",
+	 	    "ts": 1566580335.330205,
+	 	    "caller": "orm/orm.go:61",
+	 	    "msg": "Locking postgres for exclusive access with indefinite timeout"
+	 	}
+	 
+	 	Now we simulate a failure on primary by stopping the container. We see that secondary now delivers 
+	 	entries: http://localhost:6688/ is now dead, while http://localhost:6687/signin is live 
+	 	secondary-i-04d5d08893dea5d46-1566580324
+	 	{
+	 	    "level": "info",
+	 	    "ts": 1566580643.0228612,
+	 	    "caller": "services/head_tracker.go:191",
+	 	    "msg": "Connected to ethereum node wss://ropsten-rpc.linkpool.io/ws"
+	 	}
+	 	
+	 	Restart the primary container "docker start chainlink". we see in primarys log
+	 	chainlink-i-04d5d08893dea5d46-1566580324
+	 	{
+	 	    "level": "info",
+	 	    "ts": 1566580792.6215684,
+	 	    "caller": "orm/orm.go:61",
+	 	    "msg": "Locking postgres for exclusive access with indefinite timeout"
+	 	}
+	 
+	 	And we can successfully pass control back to primary demonstrating container failover
+	 	<ADD SOME USEFUL SCRIPTS and MNEMONICS>
+	 	<CLEAN NODE DIRECTORY STRUCTURE>	
+	 	<IMAGE INSTANCE>
+
+7:	Instance failover
+	 
+	 	Before starting, check security group for postgres (the new instance needs DB connectivity)
+	 		PostgreSQL 	TCP 	5432 	172.31.0.0/16
+	 
+	  	In order to demonstrate instance failover, we will first image this instance. 
+	 	First ssh into the original instance and run chainlink.
+	 		ec2-metadata -i		
+	 			instance-id: i-04d5d08893dea5d46
+	 		sudo systemctl start docker
+	 		~/.chainlink-config/ropsten/ropsten-kill.sh
+	 		~/.chainlink-config/ropsten/ropsten-boot.sh
+	 						
+	 	Next boot the image again in another EC2 instance. 
+	 		*	Be sure to "select an existing security group" and assign correct group (default:sg-75ed8c1b)
+	 		*	Be sure to associate Elasitc IP with instance in (Elastic IP menu) 	
+	 		* 	Be sure to attach IAM "chainlink-logging-role" to (EC2 Instance menus) 
+	 
+	 	Run chainlink in new instance
+	 		ec2-metadata -i
+	 			instance-id: i-08770fe9880913fe4
+	 		sudo systemctl start docker
+	 		~/.chainlink-config/ropsten/ropsten-kill.sh
+	 		~/.chainlink-config/ropsten/ropsten-boot.sh		
+	 
+	  	Now both instances are running chainlink. Here in INSTANCE_TWO. 
+	 
+	 	b7abe3e9ff6c        smartcontract/chainlink   "chainlink local nod���"   About a minute ago   Up About a minute   0.0.0.0:6687->6688/tcp   secondary
+	 	d39224dab149        smartcontract/chainlink   "chainlink local nod���"   About a minute ago   Up About a minute   0.0.0.0:6688->6688/tcp   chainlink
+	 
+	 	http://localhost:6688/ is DEAD (as expected)
+	 	secondary: {"level":"info","ts":1566604309.608423,"caller":"orm/orm.go:61","msg":"Locking postgres for exclusive access with indefinite timeout"}
+	 	chainlink: {"level":"info","ts":1566604299.5407126,"caller":"orm/orm.go:61","msg":"Locking postgres for exclusive access with indefinite timeout"}
+	 	
+	  	SSH into INSTANCE_ONE to verify that chainlink node is live at http://localhost:6688/:	
+	 	*	simulate crash by stopping instance (it works because sshfs no longer lives)	*
+	 	
+	 	SSH into INSTANCE_TWO to verify that chainlink node is live at http://localhost:6688/:
+	 	* 	node is LIVE demonstrating proper failover on server fault 						*
+	 
+	  	Reboot INSTANCE_ONE, stop INSTANCE_TWO and <IMAGE_INSTANCE>
+
+
+=====================================================================================
+						PART 4: ETHEREUM PROXY SERVER
+=====================================================================================
+
+1: 	Ethereum failover proxy. This places a server (a docker container) in between our
+	Ethereum node (or EaaS) and our chainlink node. This way we will remove the single
+	point of failure on Ethereum. 
+	 
+	 	docker pull fiews/cl-eth-failover 
+	 	docker run --detach --restart always --name ropsten-eth-failover -p 4000:4000 fiews/cl-eth-failover ${FIEWS_WSS} ${LINKPOOL_WSS}
+	 
+	 	To use this in a configuration script, we need to pull the IP-address of the docker 
+	  	container manually so we the $ETH_URL variable in the .env to point to the proxy 
+	 	server. Note that "localhost" will not suffice here as the IP is 172.17.0.2:
+	 
+	 	ETH_URL=`echo $(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' ropsten-eth-failover)`
+	 	ETH_URL="ws://${ETH_URL}:4000"
+	 
+	 	Now we write a new configuration script that takes the following sequence
+	 		a) boot the ropsten-eth-failover proxy server container
+	 		b) extract the ip of eth-failover and assign to ETH_URL
+	 		c) write chainlink configuration file ".env"
+	 		d) boot chainlink primary and secondary
+	 
+	 	Guides and source code
+	 		https://medium.com/fiews/chainlink-eth-node-failover-proxy-7d76cdea49f3
+	 		https://github.com/OracleFinder/ChainlinkEthFailover
+
+=====================================================================================
+						PART 5: DOCKER and MISC NOTES
+=====================================================================================
+
+1: Quickstart scripts for chainlink node
+	  	./.chainlink-config/ropsten/ropsten-quickstart.sh
+
+2: In case it is needed. The following may be used to wipe all docker containers and images	
+	 
+	  	Remove all images and processes 
+	 		sudo docker ps -aq
+	 		docker rm $(docker ps -aq)
+	 		docker rmi $(docker images -q)
+	 		docker pull smartcontract/chainlink
+	 
+	 	Useful flags
+	 		--detach
+	 		--restart
+	 		docker system prune
+	  		sudo systemctl start docker
+	 
+	 	Full chainlink boot (ropsten)
+	 		docker run --detach --restart always --name ropsten-primary -it -p 6688:6688 --log-driver="awslogs" --log-opt awslogs-group="chainlink-logging-group" --log-opt awslogs-stream="ropsten-primary-${CL_INSTANCE}-${CL_TIMESTAMP}" -v ~/.chainlink-ropsten:/chainlink --env-file=.env smartcontract/chainlink local node -p $CL_PWD -a $CL_API
+
+
+3: 	Chainlink update procedure:
+	 	
+	 	1) boot failover EC2-instance assigning ElasticIP, chainlink-logging-role, security-group
+	 	2) ssh into failover-node and boot chainlink
+	 		~/.chainlink-config/mainnet/run/mainnet-kill.sh
+	 	3) check AWS cloudwatch to verify that failover is waiting for lock 
+	 	4) kill mainnet node 
+	 		~/.chainlink-config/mainnet/run/mainnet-kill.sh
+	 	5) verify that failover node aquires db-lock and that it is running (CloudWatch)
+	 	6) Run update and pull most recent Chainlink image
+	 		sudo yum update
+	 		docker pull smartcontract/chainlink	
+
+=====================================================================================
+								FINAL
+=====================================================================================
+
+1: 	This basic setup guide concludes everything that is needed to properly set up 
+	configure, and test a cl-node with basic functionality up to v0.6.x. Note that 
+	git, and nodejs will remain in this disk image in order to provide the cabability 
+	to run external adapters on the node directly. However, all adapter development 
+	should take place in a separate development environment for seurity reasons.
+
+	A separate guide on adapter development will be preparted which treats the creation 
+	of a development environment, the development of adapters nodejs, and the deployment 
+	of a testing smart contract via solidity and truffle.

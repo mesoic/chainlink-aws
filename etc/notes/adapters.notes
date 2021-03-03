@@ -1,0 +1,229 @@
+=====================================================================================
+						INSTALLING BRIDGES/ADAPTERS (LOCAL)
+=====================================================================================
+
+0: 	Basic idea of adapters/bridges: there are three basic components that we will need
+	to consider: 
+	
+	a) The adapter: [ internet(API) <=> node ]
+	 	This is a piece of software, commonly written in nodejs or golang. The purpouse
+	 	of the adapter is to serve up a JSON object that our chainlink node will parse 
+	 	and push onto the blockchain. Adapters are micro-servers which fecth the data 
+	  	that is requested by the chainlink node. 
+	 
+	 	Note that we can access the output of these adapters via the "curl" command:
+	 	
+	 	curl -X POST -H 'Content-Type: application/json' -d '{"hello":"world"}' http://localhost:3000
+
+	b) The chainlink: [ node <=> blockchain ]
+	 	This is the smart contract that we will use to call the adapter. Previously, we
+	 	deployed "ATestnetConsumer.sol", which called the chainlink internal adapters to
+	 	request some data. In order to use our adapter, we will have to deploy a smart 
+	 	contract to the blockchain.
+
+	c) The jobspec: [ node internal ]
+	 	This tells the node how to process the output from the adapter.
+
+	Adapters can be installed locally (i.e. on the node), or they can be deployed for 
+	serverless compute such as via AWS. Note that if they are golang adapters, the code 
+	must be deployed out of directory specified by the golang $GOPATH environment variable 
+	which we will set in .bash_profile. Just in case, we will source .bash_profile in node
+	starup scripts.
+
+1: 	Install git/nodejs (nvm/npm)
+	 
+	 	sudo yum install git
+	 	curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.34.0/install.sh   bash
+	 	. ~/.nvm/nvm.sh
+	 	nvm install node
+
+	Note the following node commands
+	 
+	 	npm init 		(creates package.json /for new app.js projects)
+	 	npm install 	(installs the project)
+	 	node app.js 	(launches server)
+
+	Consider an app launched on port 3000
+	 
+	 	curl -X POST -H 'Content-Type: application/json' -d '{"hello":"world"}' http://localhost:3000
+	 		{"data":{"result":"some-data"},"error":null}
+
+2: 	Install Golang
+	 
+	 	sudo yum install -y golang
+	 	/bin/go version
+	 		go version go1.9.4 linux/amd64
+	 	/bin/go env
+	 		GOPATH="/home/ec2-user/go"
+	 		GOROOT="/usr/lib/golang"
+	 
+	 	add the following lines to .bash_profile
+	 
+	 			# GOROOT is the location where Go package is installed on your system
+	 			export GOROOT=/usr/lib/golang
+	 
+	 			# GOPATH is the location of your work directory
+	 			export GOPATH=$HOME/.go
+	 
+	 			# Update PATH so that you can access the go binary system wide
+	 			export PATH=$GOROOT/bin:$PATH
+	 	
+	 	make .go directory and source the bash profile
+	 			mkdir .go
+	 			source ~/.bash_profile
+
+3: 	Working with linkpools "bridges" framework
+	
+	First we need to install the framework. Note that this will go in the $GOPATH
+	directory.
+	 
+	 	go get -v github.com/linkpoolio/bridges/
+	 	ls $GOPATH/bin
+	 		bridges
+	 	
+	Bridges allows one to define a custom bridge via a simple JSON file. For example 
+	we can crate the following JSON file in ~/adaptors/json.
+	[
+		{
+		"name": "CryptoCompare",
+		"method": "GET",
+	    "url": "https://min-api.cryptocompare.com/data/price?fsym=ETH&tsyms=USD,JPY,EUR"
+		}
+	]	
+	
+	Then we can call this json with bridges
+	 
+	 	~/.go/bin/bridges -b ~/.chainlink-config/etc/adapters/json/cc-example.json
+	 		INFO[0000] Starting the bridge server                    port=8080
+	 		INFO[0000] Registering bridge                            bridge=CryptoCompare path=/
+
+	To call the bridge, we simply issue with curl (in another shell)
+	 
+	 	curl -X POST -d "{\"jobRunId\":\"1234\",\"data\":{\"key\":\"value\"}}" http://localhost:8080
+	 	{"jobRunId":"1234","status":"completed","error":null,"pending":false,"data":{"EUR":153.94,"JPY":17991.73,"USD":169.55}}
+
+	In the original shell, we can communicate see some output from the bridge when we call it 
+	 
+	  	INFO[0214] Bridge request                                clientIP="127.0.0.1:55488" code=200 	latency=81.124115ms method=POST path=/ servedAt="2019/08/30 - 15:00:04"
+
+	Finally, we can run bridges in a docker container as well as locally to achieve the same thing.
+	Note that we must specify a volume in the docker call so we find the desired path. A specific 
+	port can also be specified as well (so we can install multiple bridges. 
+	 
+	 	docker pull linkpool/bridges:latest
+	 	docker run -it -v ~/.chainlink-config/etc/adapters/json:/json linkpool/bridges:latest -b json/cc-example.json -p 7000	
+
+4:	Lets install and test and adapter using the bridges framework (AlphaVantage). Note the port 
+	settings in the docker container, as well as passing the API_KEY as an environment variable 
+	to the docker container
+	 
+	 	Download and install the JSON in the adapters diretory
+	 	Include the API key in the JSON file
+	  	Fire up the bridge in a docker container
+	 
+	 	docker run --detach --name alphaVantage -p 7000:7000 -it -v ~/.chainlink-config/etc/adapters/json:/json -e API_KEY={$API_KEY} linkpool/bridges:latest -b json/alphaVantage.json -p 7000
+
+
+	Try to curl something out of the adapter to test functionality
+	 
+	 	curl -X POST -H 'Content-Type: application/json' -d '{"jobRunId": "1234","data": {"function": "GLOBAL_QUOTE","symbol": "MSFT"}}' http://localhost:7000
+	 
+	 	{"jobRunId":"1234","status":"completed","error":null,"pending":false,"data":{"Global Quote":{"01. symbol":"MSFT","02. open":"139.1500","03. high":"139.1800","04. low":"136.2700","05. price":"137.1769","06. volume":"7667144","07. latest trading day":"2019-08-30","08. previous close":"138.1200","09. change":"-0.9431","10. change percent":"-0.6828%"}}}
+
+	In the chainlink node, create a bride to http://localhost:7000 
+	 	name	
+	 		alphavantage
+	 	url	
+	 		http://localhost:7000
+	 	Confirmations 
+	 		0
+	 	Minimum Contract Payment
+	 		0
+	 	Outgoing Token
+	 		a3de510e5c2049b898fba1443db39165
+
+
+	Finally, we need to build the jobspec (JobID: b9b6eb25eb0a490b94474d226f58a7f1).
+	{
+	  "initiators": [
+	    {
+	      "type": "runlog",
+	      "params": {
+	        "address": "0x5471030a14ea46a32f065ac226516723b429ec2b"
+	      }
+	    }
+	  ],
+	  "tasks": [
+	    {
+	      "type": "alphavantage"
+	    },
+	    {
+	      "type": "copy"
+	    },
+	    {
+	      "type": "multiply"
+	    },
+	    {
+	      "type": "ethuint256"
+	    },
+	    {
+	      "type": "ethtx"
+	    }
+	  ]
+	}
+
+	Now we need to deploy a chainlink in order to test the functionality of the adapter. 
+	This will be done on the local machine rather than on the node server. We have some
+	example chainlinks available here.
+	  
+	 	https://github.com/linkpoolio/example-chainlinks
+
+=====================================================================================
+				INSTALLING ADAPTERS and API ENDPOINTS with (AWS LAMBDA)
+=====================================================================================
+
+1: 	Clone adapter into directory
+	 
+	 	https://github.com/OracleFinder/CryptoCompareExternalAdapter.git
+	 	cd Adapter/
+
+2:	Build the adapter and create zip file. The adapter can now be run in the console, 
+	viat a docker container, or via AWS Lambda
+	 
+	 	npm install
+	 	zip -r cl-cc.zip .
+
+3:	Set up AWS Lambda and upload zip file
+	 	
+	 	Guide: https://github.com/thodges-gh/ExternalAdapterExample (comprehensive)
+	  	Guide: https://chainlinkadapters.com/guides
+	 
+
+4:	General patterns. When setting up adapters it is best to follow the comprehensive 
+	guide above. However there are several steps which must be performed.
+	 
+	    a) Create the Lambda function.
+	 		i)   Defining runtime environment and attaching IAM role (create new role from templates).
+	 		ii)  zip and upload external adapter file (Python, Go, Node.js)
+	 		iii) obtain and set API_KEY environment variable
+	 		iv)  create a test event. this involves passing a JSON object to the adapter and 
+	 			 examining the output to verify functionality.
+	 
+	 	b) Create an API endpoint for our Lambda function. This is a JSON(in)-> JSON(out) interface 
+	 		for the adapter via HTTP POST. We need to do a few things 
+	 		i) 	 Create the REST API (so we can pass in the JSON object)
+	 		ii)  Create Rsource and point it to our Lambda function 
+	 		iii) Create Method and define GET/POST
+	 		iV)  Deploy API. This will involve creation of a "stage". 
+	 		v)   In the stage definition, note the endpoint 
+	 		vi)  Test API via "lightning" button. Paste JSON into "request body" of POST
+	 		vii) Test the API via curl
+	 
+	 		curl -X POST -H 'Content-Type: application/json' -d '{"id": "278c97ffadb54a5bbb93cfec5f7b5503","data": {"endpoint": "price", "fsym": "ETH", "tsyms": "USD"} }' https://{$ID}.execute-api.eu-central-1.amazonaws.com/adapters/cl-cc
+	 
+	 	Note the endpoint. This is what we configure as the "Bridge" for our node
+	 
+	 		https://{$ID}.execute-api.eu-central-1.amazonaws.com/{$STAGE_NAME}/{$FUNCTION_NAME}
+	 	
+	 		e.g. https://{$ID}.execute-api.eu-central-1.amazonaws.com/adapters/cl-cc
+	 

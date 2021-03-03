@@ -1,0 +1,10 @@
+# Remove anything that contains password data (important)
+bak/config/*
+run/config/*
+run/nodes/*
+
+# Remove utils config (scripts)
+etc/utils/.config
+
+# Remove notes (due to presence of mainnet addresses)
+etc/notes/mainnet.notes

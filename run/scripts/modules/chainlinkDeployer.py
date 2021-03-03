@@ -1,5 +1,6 @@
 #!/bin/python 
 import os
+import time
 import json
 import collections
 
@@ -60,10 +61,17 @@ class chainlinkDeployer:
 				self.config["nodes"][_node]["ORACLE_CONTRACT_ADDRESS"]
 			))
 
+			# Database URL
 			f.write("%s=%s/%s\n"%(
 				"DATABASE_URL",
 				postgres_base, 
 				self.config["nodes"][_node]["DB_NAME"]
+			))
+
+			# Write node specific data
+			f.write("%s=%s\n"%(
+				"CHAINLINK_PORT",
+				self.config["nodes"][_node]["CHAINLINK_PORT"]
 			))
 
 			f.close()
@@ -104,6 +112,8 @@ class chainlinkDeployer:
 		# Run the container
 		os.system(cmd)
 
+		# Sleep
+		time.sleep(2.0)
 
 	# Method to run a node (with AWS cloudwatch logging)
 	# When running the node the first time (i.e. when .env points to an existing but empty database), 
@@ -123,21 +133,23 @@ class chainlinkDeployer:
   		if detached:	
 	
 			# primary container (chainlink node)
-			cmd  = "docker run --detach --restart always --name %s -it -p %s:%s "%(_node, port, port)
+			cmd  = "docker run --detach --restart always --name %s -it -p %s:6688 "%(_node, port)
 			cmd += "--log-driver=\"awslogs\" --log-opt awslogs-group=\"chainlink-logging-group\" --log-opt awslogs-stream=\"%s\" "%(_node)
 			cmd += "-v %s:/chainlink --env-file=%s/.env smartcontract/chainlink local node -p /chainlink/.passwd"%(_node_dir, _node_dir)
-
-			print(cmd)
+			# print(cmd)
 		
 		# First run
 		else:
 
 			cmd = "docker run -it -p %s:%s "%(port, port)
 			cmd += "-v %s:/chainlink --env-file=%s/.env smartcontract/chainlink local node"%(_node_dir, _node_dir)
+			# print(cmd)		
 
-			print(cmd)		
-
+		# Start the node
 		os.system(cmd)
+
+		# Sleep
+		time.sleep(2.0)
 
 	# Method to halt EaaS
 	def kill_container(self, _name):

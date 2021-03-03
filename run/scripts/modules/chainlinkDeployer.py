@@ -3,7 +3,7 @@ import os
 import json
 import collections
 
-class fluxMonitor: 
+class chainlinkDeployer: 
 
 	# Initialize
 	def __init__(self):

@@ -1,9 +1,9 @@
 #!/bin/python
 
-import modules.fluxMonitor as fm
+import modules.chainlinkDeployer as clDeployer
 
 if __name__ == "__main__": 
 
-	Monitor = fm.fluxMonitor()
-	Monitor.generate_env()
-	Monitor.generate_keystore()
+	Deployer = clDeployer.chainlinkDeployer()
+	Deployer.generate_env()
+	Deployer.generate_keystore()

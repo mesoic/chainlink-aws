@@ -1,7 +1,8 @@
 # Remove anything that contains password data (important)
 bak/config/*
-run/config/*
 run/nodes/*
+run/config/*.json 
+
 
 # Remove utils config (scripts)
 etc/utils/.config

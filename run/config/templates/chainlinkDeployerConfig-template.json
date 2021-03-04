@@ -1,0 +1,40 @@
+{
+
+	"cl-config " : {
+		"LINK_CONTRACT_ADDRESS" 	: "0x20fe562d797a42dcb3399062ae9546cd06f63280",
+		"MINIMUM_CONTRACT_PAYMENT" 	: "1000000000000000"
+	},
+
+	"cl-database"  : {
+		"DB_USER" 		: "",
+		"DB_PASSWORD"	: "",
+		"DB_ENDPOINT"	: "",
+		"DB_PORT"		: ""
+	},
+
+	"EaaS" : {
+		"FIEWS_API" 	:	"",
+		"INFURA_API"	: 	""
+	},
+
+	"nodes" : {
+
+		"fluxNode0" : {
+			"CHAINLINK_PORT"			: "http://localhost:6686",
+			"DB_NAME"					: "fluxnode0",
+			"ORACLE_CONTRACT_ADDRESS" 	: ""
+		},
+
+		"fluxNode1" : {
+			"CHAINLINK_PORT"			: "http://localhost:6687",
+			"DB_NAME"					: "fluxnode1",
+			"ORACLE_CONTRACT_ADDRESS" 	: ""
+		},
+
+		"fluxNode2" : {
+			"CHAINLINK_PORT"			: "http://localhost:6688",
+			"DB_NAME"					: "fluxnode2",
+			"ORACLE_CONTRACT_ADDRESS" 	: ""
+		}
+	}
+}

@@ -10,7 +10,7 @@ class chainlinkDeployer:
 	def __init__(self):
 
 		# Open configuration file
-		with open('../config/fluxMonitorConfig.json') as json_file:	
+		with open('../config/chainlinkDeployerConfig.json') as json_file:	
 	  		self.config = json.load(json_file)
 
 	# Method to programatically generate .env files 
@@ -79,7 +79,7 @@ class chainlinkDeployer:
 	# Loop through keystore json object and create .passwd files
 	def generate_keystore(self):
 
-		with open('../config/fluxMonitorKeystore.json') as json_file:	
+		with open('../config/chainlinkDeployerKeystore.json') as json_file:	
 			keystore = json.load(json_file)
 
 

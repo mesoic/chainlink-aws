@@ -34,6 +34,7 @@ class chainlinkDeployer:
 			"MIN_OUTGOING_CONFIRMATIONS" : "2"
 		}
 
+
 	  	# Configure database URL
 	  	postgres_base = "postgresql://%s:%s@%s:%s"%( 
 			self.config["cl-database"]["DB_USER"],
@@ -55,6 +56,13 @@ class chainlinkDeployer:
 			# Write the base configuration
 			for k,v in base_config.items(): 
 				f.write("%s=%s\n"%(k, v)) 
+
+			# Write base gas price
+			f.write("%s=%s\n"%(
+				"ETH_GAS_PRICE_DEFAULT",
+				self.config["cl-config"]["ETH_GAS_PRICE_DEFAULT"]
+			))
+	
 
 			# Write node specific data
 			f.write("%s=%s\n"%(
